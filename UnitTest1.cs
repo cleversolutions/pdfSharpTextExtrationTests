@@ -18,7 +18,7 @@ namespace pdf_text_extractor_test
 {
     public class Tests
     {
-        private Dictionary<string, Dictionary<int,int>> FontLookup = new Dictionary<string, Dictionary<int, int>>();
+        private Dictionary<string, Dictionary<int, int>> FontLookup = new Dictionary<string, Dictionary<int, int>>();
         private string CurrentFont = null;
 
         [SetUp]
@@ -51,17 +51,20 @@ namespace pdf_text_extractor_test
                 foreach (var page in document.Pages)
                 {
                     var fontResource = page.Resources.Elements.GetDictionary("/Font")?.Elements;
-                    if(fontResource == null) continue;
+                    if (fontResource == null) continue;
                     //All that above isn't going to do, but it's close...
-                    foreach(var fontName in fontResource.Keys){
+                    foreach (var fontName in fontResource.Keys)
+                    {
                         var resource = fontResource[fontName];
                         var unicodeDictionary = ((resource as PdfReference)?.Value as PdfDictionary)?.Elements?.GetDictionary("/ToUnicode");
                         var stream = unicodeDictionary?.Stream;
-                        if(stream == null ){
+                        if (stream == null)
+                        {
                             continue;
                         }
                         var cmap = ParseCMap(stream.ToString());
-                        if(cmap != null && ! FontLookup.ContainsKey(fontName)){
+                        if (cmap != null && !FontLookup.ContainsKey(fontName))
+                        {
                             FontLookup.Add(fontName, cmap);
                         }
                     }
@@ -74,9 +77,10 @@ namespace pdf_text_extractor_test
 
         }
 
-        private Dictionary<int,int> ParseCMap(string cMap){
-            Debug.WriteLine(cMap);
-            var map = new Dictionary<int,int>();
+        private Dictionary<int, int> ParseCMap(string cMap)
+        {
+            // Debug.WriteLine(cMap);
+            var map = new Dictionary<int, int>();
             ParseCMap(cMap, map);
             return map;
         }
@@ -96,23 +100,23 @@ namespace pdf_text_extractor_test
             {
                 if (beginbfcharIdx < beginbfrangeIdx)
                 {
-                    ParseBFChar(cMap.Substring(beginbfcharIdx + 11, bfCharLen), mapping);
+                    ParseBFChar(cMap.Substring(beginbfcharIdx + 11, bfCharLen - 11), mapping);
                     cMap = cMap.Substring(beginbfcharIdx + 11 + bfCharLen + 9);
                 }
                 else
                 {
-                    ParseBFRange(cMap.Substring(beginbfrangeIdx + 12, bfRangeLen), mapping);
+                    ParseBFRange(cMap.Substring(beginbfrangeIdx + 12, bfRangeLen - 12), mapping);
                     cMap = cMap.Substring(beginbfrangeIdx + 12 + bfRangeLen + 10);
                 }
             }
             else if (beginbfcharIdx >= 0)
             {
-                ParseBFChar(cMap.Substring(beginbfcharIdx + 11, bfCharLen), mapping);
+                ParseBFChar(cMap.Substring(beginbfcharIdx + 11, bfCharLen - 11), mapping);
                 cMap = cMap.Substring(beginbfcharIdx = 11 + bfCharLen + 9);
             }
             else if (beginbfrangeIdx >= 0)
             {
-                ParseBFRange(cMap.Substring(beginbfrangeIdx + 12, bfRangeLen), mapping);
+                ParseBFRange(cMap.Substring(beginbfrangeIdx + 12, bfRangeLen - 12), mapping);
                 cMap = cMap.Substring(beginbfrangeIdx + 12 + bfRangeLen + 10);
             }
             else
@@ -127,15 +131,18 @@ namespace pdf_text_extractor_test
         ///
         /// Pase the contents of a CMAP table from beginbfchar to endbfchar
         ///
-        private void ParseBFChar(string bfChar, Dictionary<int,int> mapping)
+        private void ParseBFChar(string bfChar, Dictionary<int, int> mapping)
         {
             string[] lines = bfChar.Split("\n", StringSplitOptions.RemoveEmptyEntries);
-            foreach(var map in lines){
+            foreach (var map in lines)
+            {
                 var match = Regex.Match(map, @"<([a-fA-F0-9]+)>\s?<([a-fA-F0-9]{4})>");
-                if(match.Groups.Count == 3){
+                if (match.Groups.Count == 3)
+                {
                     int glyf = Convert.ToInt32(match.Groups[1].Value, 16);
                     int ucode = Convert.ToInt32(match.Groups[2].Value, 16);
-                    if(!mapping.ContainsKey(glyf)){
+                    if (!mapping.ContainsKey(glyf))
+                    {
                         mapping.Add(glyf, ucode);
                     }
                 }
@@ -146,11 +153,39 @@ namespace pdf_text_extractor_test
         /// Parse the contents of a CMAP file from beginbfrange to endbfrange
         /// This will generate a mapping for each character in each range
         ///
-        private void ParseBFRange(string fbRange, Dictionary<int,int> mapping)
+        private void ParseBFRange(string fbRange, Dictionary<int, int> mapping)
         {
             string[] CMapArray = fbRange.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-            //TODO... this is just a bit more complicated
-            throw new NotImplementedException("To Be done");
+
+            string[] lines = fbRange.Split("\n", StringSplitOptions.RemoveEmptyEntries);
+            foreach (var map in lines)
+            {
+                //Example <4b><4b><005f>
+                var match = Regex.Match(map, @"<([a-fA-F0-9]+)>\s?<([a-fA-F0-9]+)>\s?<([a-fA-F0-9]{4})>");
+                if (match.Groups.Count == 4)
+                {
+                    //Convert our matches to ints
+                    int fromGlyf = Convert.ToInt32(match.Groups[1].Value, 16);
+                    int toGlyf = Convert.ToInt32(match.Groups[2].Value, 16);
+                    int ucode = Convert.ToInt32(match.Groups[3].Value, 16);
+                    
+                    if(fromGlyf < toGlyf) continue; //That would be unusual
+                    
+                    //Map all chars from fromGlyf to toGlyf and add
+                    for (int i = 0; fromGlyf + i <= toGlyf; i++)
+                    {
+                        int glyf = fromGlyf + i;
+                        if (!mapping.ContainsKey(glyf))
+                        {
+                            mapping.Add(glyf, ucode + i);
+                        }
+                    }
+                }else{
+                    //maybe the format was <02> <02> [<0066006C>]
+                    throw new NotImplementedException("Lower hanging fruit first");
+                }
+            }
+
         }
 
 
@@ -188,33 +223,37 @@ namespace pdf_text_extractor_test
 
         private void ExtractTextFromOperator(COperator obj, StringBuilder target)
         {
-            Debug.WriteLine($"Op -> {obj.ToString()}");
+            // Debug.WriteLine($"Op -> {obj.ToString()}");
             foreach (var op in obj.Operands)
             {
                 if (op is CInteger cint)
                 {
-                    Debug.WriteLine($"  > CInteger - {op.ToString()} ({cint.Value:X})");
+                    // Debug.WriteLine($"  > CInteger - {op.ToString()} ({cint.Value:X})");
                 }
                 else if (op is CName cname)
                 {
-                    Debug.WriteLine($"  > CName - {op.ToString()} ({cname.Name})");
+                    // Debug.WriteLine($"  > CName - {op.ToString()} ({cname.Name})");
                 }
                 else
                 {
-                    Debug.WriteLine($"  > {op.GetType().Name} - {op.ToString()}");
+                    // Debug.WriteLine($"  > {op.GetType().Name} - {op.ToString()}");
                 }
             }
 
-            if(obj.OpCode.OpCodeName == OpCodeName.Tf){
+            if (obj.OpCode.OpCodeName == OpCodeName.Tf)
+            {
                 var fontName = obj.Operands.OfType<CName>().FirstOrDefault();
-                if(fontName != null){
+                if (fontName != null)
+                {
                     //This is likely the wrong way to do this
                     CurrentFont = fontName.Name;
-                    Debug.WriteLine($"Selecting Font {fontName.Name}");
-                }else{
-                    Debug.WriteLine("Can't parse font name");
+                    // Debug.WriteLine($"Selecting Font {fontName.Name}");
                 }
-                
+                else
+                {
+                    // Debug.WriteLine("Can't parse font name");
+                }
+
             }
             if (obj.OpCode.OpCodeName == OpCodeName.Tj || obj.OpCode.OpCodeName == OpCodeName.TJ)
             {
@@ -232,22 +271,23 @@ namespace pdf_text_extractor_test
         {
             string text = obj.Value;
 
-            if(! string.IsNullOrEmpty(CurrentFont) && FontLookup.ContainsKey(CurrentFont)){
+            if (!string.IsNullOrEmpty(CurrentFont) && FontLookup.ContainsKey(CurrentFont))
+            {
                 //Do character sub with the current fontMap
                 var fontMap = FontLookup[CurrentFont];
-                
+
                 //Convert to bytes
                 var chars = text.ToCharArray();
-                Debug.WriteLine($"Replacing Chars in ({string.Join(",", chars.Select(b => $"{b:X}"))})");
+                // Debug.WriteLine($"Replacing Chars in ({string.Join(",", chars.Select(b => $"{b:X}"))})");
                 var newChars = chars
                     .Where(c => c != '\0')
-                    .Select(b => fontMap.ContainsKey(b) ? (char)fontMap[b] : b )
+                    .Select(b => fontMap.ContainsKey(b) ? (char)fontMap[b] : b)
                     .ToArray();
 
-                Debug.WriteLine($"Replaced Chars in  ({string.Join(",", newChars.Select(b => $"{b:X}"))})");
+                // Debug.WriteLine($"Replaced Chars in  ({string.Join(",", newChars.Select(b => $"{b:X}"))})");
                 text = new string(newChars);
-                Debug.WriteLine($"Apending {text}");
-            
+                // Debug.WriteLine($"Apending {text}");
+
             }
             target.Append(text);
         }
