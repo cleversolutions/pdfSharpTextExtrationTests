@@ -29,17 +29,17 @@ namespace pdf_text_extractor_test
         [Test]
         public void Test1()
         {
-            var filePath = "../../../test-files/test.pdf";
-            //var filePath = "../../../test-files/2017-BMA.pdf";
-            //var filePath = "../../../test-files/windows-vista.pdf";
+            // var filePath = "../../../test-files/test.pdf";
+            // var filePath = "../../../test-files/2017-BMA.pdf";
+            var filePath = "../../../test-files/windows-vista.pdf";
             //var filePath = "../../../test-files/managecookies.pdf";
             string result;
             using (var fs = File.Open(filePath, FileMode.Open))
             {
                 result = GetTextFromPdf(fs);
             }
-            Debug.WriteLine($"Final Result: {result}");
-            Debug.WriteLine("Result should be: en dash between quotes \"–\". – A");
+            Debug.WriteLine($"Final Result: {result.Substring(0, 500)}");
+            // Debug.WriteLine("Result should be: en dash between quotes \"–\". – A");
             Assert.AreEqual("en dash between quotes \"–\". – A\n", result);
         }
 
@@ -47,14 +47,11 @@ namespace pdf_text_extractor_test
         {
             using (var document = PdfReader.Open(pdfFileStream, PdfDocumentOpenMode.ReadOnly))
             {
-                PdfSharpCore.Pdf.PdfItem pdfItem = document.Internals.Catalog.Elements.Values.ElementAt(3);
-                var f = (pdfItem as PdfReference).Value;
-                //Elements.Values.ElementAt(1).Elements.Items[0].Value.Resouces.Elements.Values[1].Values[2].Value.Elements.Values[6].Value.Stream
                 var result = new StringBuilder();
                 foreach (var page in document.Pages)
                 {
-                    var fontResource = page.Resources.Elements.GetDictionary("/Font").Elements;
-                    
+                    var fontResource = page.Resources.Elements.GetDictionary("/Font")?.Elements;
+                    if(fontResource == null) continue;
                     //All that above isn't going to do, but it's close...
                     foreach(var fontName in fontResource.Keys){
                         var resource = fontResource[fontName];
@@ -134,7 +131,7 @@ namespace pdf_text_extractor_test
         {
             string[] lines = bfChar.Split("\n", StringSplitOptions.RemoveEmptyEntries);
             foreach(var map in lines){
-                var match = Regex.Match(map, "<([a-fA-F0-9]+)> <([a-fA-F0-9]{4})>");
+                var match = Regex.Match(map, @"<([a-fA-F0-9]+)>\s?<([a-fA-F0-9]{4})>");
                 if(match.Groups.Count == 3){
                     int glyf = Convert.ToInt32(match.Groups[1].Value, 16);
                     int ucode = Convert.ToInt32(match.Groups[2].Value, 16);
