@@ -18,6 +18,9 @@ namespace pdf_text_extractor_test
 {
     public class Tests
     {
+        private Dictionary<string, Dictionary<int,int>> FontLookup = new Dictionary<string, Dictionary<int, int>>();
+        private string CurrentFont = null;
+
         [SetUp]
         public void Setup()
         {
@@ -37,10 +40,8 @@ namespace pdf_text_extractor_test
             }
             Debug.WriteLine($"Final Result: {result}");
             Debug.WriteLine("Result should be: en dash between quotes \"–\". – A");
-            Assert.AreEqual("en dash between quotes \"–\". – A", result);
+            Assert.AreEqual("en dash between quotes \"–\". – A\n", result);
         }
-
-        private static Dictionary<string, Dictionary<int,int>> FontLookup = new Dictionary<string, Dictionary<int, int>>();
 
         public string GetTextFromPdf(Stream pdfFileStream)
         {
@@ -76,7 +77,8 @@ namespace pdf_text_extractor_test
 
         }
 
-        private static Dictionary<int,int> ParseCMap(string cMap){
+        private Dictionary<int,int> ParseCMap(string cMap){
+            Debug.WriteLine(cMap);
             var map = new Dictionary<int,int>();
             ParseCMap(cMap, map);
             return map;
@@ -84,7 +86,7 @@ namespace pdf_text_extractor_test
 
         // A CMap is a character map. 
         // https://blog.idrsolutions.com/2012/05/understanding-the-pdf-file-format-embedded-cmap-tables/
-        private static void ParseCMap(string cMap, Dictionary<int, int> mapping)
+        private void ParseCMap(string cMap, Dictionary<int, int> mapping)
         {
             //cMap can have either bfChar, or bfRange, take whichever is first
             int beginbfcharIdx = cMap.IndexOf("beginbfchar");
@@ -121,18 +123,21 @@ namespace pdf_text_extractor_test
                 //There is nothing left to parse
                 return;
             }
-            //Call yourself until there is nothing left to parse
+            //Recurse until there is nothing left to parse
             ParseCMap(cMap, mapping);
         }
 
-        private static void ParseBFChar(string bfChar, Dictionary<int,int> mapping)
+        ///
+        /// Pase the contents of a CMAP table from beginbfchar to endbfchar
+        ///
+        private void ParseBFChar(string bfChar, Dictionary<int,int> mapping)
         {
             string[] lines = bfChar.Split("\n", StringSplitOptions.RemoveEmptyEntries);
             foreach(var map in lines){
-                var match = Regex.Match(map, "<([0-9]+)> <([0-9]{4})>");
+                var match = Regex.Match(map, "<([a-fA-F0-9]+)> <([a-fA-F0-9]{4})>");
                 if(match.Groups.Count == 3){
-                    int glyf = int.Parse(match.Groups[1].Value);
-                    int ucode = int.Parse(match.Groups[2].Value);
+                    int glyf = Convert.ToInt32(match.Groups[1].Value, 16);
+                    int ucode = Convert.ToInt32(match.Groups[2].Value, 16);
                     if(!mapping.ContainsKey(glyf)){
                         mapping.Add(glyf, ucode);
                     }
@@ -140,7 +145,11 @@ namespace pdf_text_extractor_test
             }
         }
 
-        private static void ParseBFRange(string fbRange, Dictionary<int,int> mapping)
+        ///
+        /// Parse the contents of a CMAP file from beginbfrange to endbfrange
+        /// This will generate a mapping for each character in each range
+        ///
+        private void ParseBFRange(string fbRange, Dictionary<int,int> mapping)
         {
             string[] CMapArray = fbRange.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
             //TODO... this is just a bit more complicated
@@ -148,7 +157,7 @@ namespace pdf_text_extractor_test
         }
 
 
-        private static void ExtractText(CObject obj, StringBuilder target)
+        private void ExtractText(CObject obj, StringBuilder target)
         {
             switch (obj)
             {
@@ -172,7 +181,7 @@ namespace pdf_text_extractor_test
             }
         }
 
-        private static void ExtractTextFromEnumable(CSequence sequence, StringBuilder target)
+        private void ExtractTextFromEnumable(CSequence sequence, StringBuilder target)
         {
             foreach (var obj in sequence)
             {
@@ -180,7 +189,7 @@ namespace pdf_text_extractor_test
             }
         }
 
-        private static void ExtractTextFromOperator(COperator obj, StringBuilder target)
+        private void ExtractTextFromOperator(COperator obj, StringBuilder target)
         {
             Debug.WriteLine($"Op -> {obj.ToString()}");
             foreach (var op in obj.Operands)
@@ -202,7 +211,8 @@ namespace pdf_text_extractor_test
             if(obj.OpCode.OpCodeName == OpCodeName.Tf){
                 var fontName = obj.Operands.OfType<CName>().FirstOrDefault();
                 if(fontName != null){
-                    //Take note of the font
+                    //This is likely the wrong way to do this
+                    CurrentFont = fontName.Name;
                     Debug.WriteLine($"Selecting Font {fontName.Name}");
                 }else{
                     Debug.WriteLine("Can't parse font name");
@@ -213,33 +223,36 @@ namespace pdf_text_extractor_test
             {
                 foreach (var element in obj.Operands)
                 {
-                    if (element is CName cName && cName.Name == "/TT0")
-                    {
-                        Debug.WriteLine("/TT0 Detected");
-                    }
-                    if (element is CInteger cInteger)
-                    {
-                        Debug.WriteLine($"CInteger == {cInteger.Value:X}");
-                    }
                     ExtractText(element, target);
                 }
 
-                target.Append(" ");
+                // target.Append(" ");
             }
         }
 
 
-        private static void ExtractTextFromString(CString obj, StringBuilder target)
+        private void ExtractTextFromString(CString obj, StringBuilder target)
         {
-            var strBytes = Encoding.Default.GetBytes(obj.Value);
-            var chars = string.Join(",", strBytes.Select(b => $"{b:X}"));
-            Debug.WriteLine($"Replacing Chars in ({chars})");
-            var replacedArray = strBytes.Select(b => charMap.ContainsKey(b) ? (byte)charMap[b] : b ).ToArray();
-            chars = string.Join(",", replacedArray.Select(b => $"{b:X}"));
-            Debug.WriteLine($"Replaced Chars in ({chars})");
-            var newStr = Encoding.Default.GetString(replacedArray);
-            Debug.WriteLine($"Apending {newStr}");
-            target.Append(obj.Value);
+            string text = obj.Value;
+
+            if(! string.IsNullOrEmpty(CurrentFont) && FontLookup.ContainsKey(CurrentFont)){
+                //Do character sub with the current fontMap
+                var fontMap = FontLookup[CurrentFont];
+                
+                //Convert to bytes
+                var chars = text.ToCharArray();
+                Debug.WriteLine($"Replacing Chars in ({string.Join(",", chars.Select(b => $"{b:X}"))})");
+                var newChars = chars
+                    .Where(c => c != '\0')
+                    .Select(b => fontMap.ContainsKey(b) ? (char)fontMap[b] : b )
+                    .ToArray();
+
+                Debug.WriteLine($"Replaced Chars in  ({string.Join(",", newChars.Select(b => $"{b:X}"))})");
+                text = new string(newChars);
+                Debug.WriteLine($"Apending {text}");
+            
+            }
+            target.Append(text);
         }
 
     }
