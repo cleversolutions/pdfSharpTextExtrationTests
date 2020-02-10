@@ -34,9 +34,11 @@ namespace pdf_text_extractor_test
             // var filePath = "../../../test-files/windows-vista.pdf";
             //var filePath = "../../../test-files/managecookies.pdf";
             string result;
+            PdfSharpTextExtractor extractor = new PdfSharpTextExtractor();
             using (var fs = File.Open(filePath, FileMode.Open))
             {
-                result = GetTextFromPdf(fs);
+                result = extractor.GetTextFromPdf(fs);
+                // result = GetTextFromPdf(fs);
             }
             Debug.WriteLine($"Final Result: {result.Substring(0, Math.Min(result.Length, 1000))}");
             // Debug.WriteLine("Result should be: en dash between quotes \"–\". – A");
@@ -56,7 +58,7 @@ namespace pdf_text_extractor_test
                     Debug.WriteLine($"Processing Page {pageIdx}");
 
                     ParseCMAPs(page);
-                    ExtractText(ContentReader.ReadContent(page), result);
+                    // ExtractText(ContentReader.ReadContent(page), result);
                     result.AppendLine();
 
                 }
@@ -78,8 +80,9 @@ namespace pdf_text_extractor_test
                 {
                     continue;
                 }
-                var cmap = ParseCMap(stream.ToString());
-                FontLookup[fontName] = cmap;
+                var cm = new CMap(stream);
+                // var cmap = ParseCMap(stream.ToString());
+                // FontLookup[fontName] = cmap;
             }
         }
 
@@ -110,7 +113,7 @@ namespace pdf_text_extractor_test
         {
             //TODO I'll likely refactor this into a class with attributes for the cmap, code space and other attributes
 
-            //TODO check for usecmap -- we can refer to other CMAPs including built-in ones...            
+            //TODO check for usecmap -- we can refer to other CMAPs including built-in ones...
 
             //TODO -- confirm if maps may use cfchar instead of bfchar
             //cMap can have either bfChar, or bfRange, take whichever is first
@@ -168,7 +171,6 @@ namespace pdf_text_extractor_test
 
         ///
         /// Pase the contents of a CMAP table from beginbfchar to endbfchar
-        /// TODO - refactor this to not require \n char
         ///
         private void ParseBFChar(string bfChar, Dictionary<int, int> mapping)
         {
