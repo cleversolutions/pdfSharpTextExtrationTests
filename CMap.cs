@@ -9,13 +9,15 @@ using System.Text.RegularExpressions;
 public class CMap
 {
     private readonly string CMapStr;
+    private readonly string FontName;
 
     public List<CodeSpaceRange> CodeSpaceRanges { get; set; }
 
-    public CMap(PdfStream stream)
+    public CMap(PdfStream stream, string fontName)
     {
         CodeSpaceRanges = new List<CodeSpaceRange>();
         CMapStr = stream.ToString();
+        FontName = fontName;
 
         //First parse the code space ranges
         ParseCodeSpaceRanges();
@@ -40,10 +42,10 @@ public class CMap
             var range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid && r.NumberOfBytes == 1);
             if (range != null)
             {
-                if (range.Mapping.TryGetValue(cid, out int ucode))
+                if (range.Mapping.TryGetValue(cid, out string ucode))
                 {
                     // chars[chrIdx] = (char)ucode;
-                    result += (char)ucode;
+                    result += ucode;
                     continue;
                 }
             }
@@ -53,15 +55,16 @@ public class CMap
             range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid && r.NumberOfBytes == 2);
             if (range != null)
             {
-                if (range.Mapping.TryGetValue(cid, out int ucode))
+                if (range.Mapping.TryGetValue(cid, out string ucode))
                 {
                     // chars[chrIdx] = (char)ucode;
-                    result += (char)ucode;
+                    result += ucode;
                     chrIdx++;
                     continue;
                 }else{
                     result += (char)cid;
                     chrIdx++;
+                    Debug.WriteLine($"Pass through char {cid:X} for font {FontName}");
                     continue;
                 }
             }
@@ -69,6 +72,7 @@ public class CMap
             //TODO 3 and 4 byte
 
             //Fallback on using the cid
+            Debug.WriteLine($"Failed to encode {cid:X}");
             result.Append((char)cid);
 
 
@@ -182,13 +186,15 @@ public class CMap
         ParseMappings(cMap);
     }
 
-    private void AddMapping(int cid, int ucode, int lengthInBytes)
+    private void AddMapping(int cid, string ucode, int lengthInBytes)
     {
         //Find the proper codespace range and add the mapping
         var range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid && r.NumberOfBytes == lengthInBytes);
         if (range != null)
         {
             range.Mapping[cid] = ucode;
+        }else{
+            Debug.WriteLine($"Can't find char range for {cid:X}, {ucode:X}");
         }
     }
 
@@ -197,7 +203,8 @@ public class CMap
     ///
     private void ParseBFChar(string bfChar)
     {
-        string pattern = @"\s?<([a-fA-F0-9]+)>\s?<([a-fA-F0-9]{4})>";
+        //TODO - this assumes src and dst are both in hex format; however dst can be dstCharname 
+        string pattern = @"\s?<([a-fA-F0-9]+)>\s?<([a-fA-F0-9]+)>";
         Match match;
         while ((match = Regex.Match(bfChar, pattern)).Success)
         {
@@ -209,10 +216,29 @@ public class CMap
             {
                 try
                 {
-                    int cid = Convert.ToInt32(match.Groups[1].Value, 16);
-                    //TODO -- this needs to be different.. can be multiple chars
-                    int ucode = Convert.ToInt32(match.Groups[2].Value, 16);
-                    AddMapping(cid, ucode, match.Groups[1].Value.Length / 2);
+                    //The srcCode must be representable by an int
+                    int srcCode = Convert.ToInt32(match.Groups[1].Value, 16);
+                    int srcCodeByteLength = match.Groups[1].Value.Length / 2;
+                    
+                    //convert the dstCode to a string
+                    var dstCode = match.Groups[2].Value;
+                    string ucode = null;
+                    int length = dstCode.Length;
+                    if(length <= 4){
+                        //If the dstCode is 4 digit hex, convert it to a 1 char string
+                        char ch = (char)Convert.ToInt16(dstCode, 16);
+                        ucode = ch.ToString();
+                    }else if(length % 4 == 0){
+                        //if dstCode is a multiple of 4, convert it into several char string
+                        var chars = Enumerable.Range(0, length/4)
+                            .Select(i => dstCode.Substring(i*4, 4))
+                            .Select(str => (char)Convert.ToInt16(str, 16));
+                        ucode = string.Concat(chars);
+                    }else{
+                        Debug.WriteLine("dstCode length wasn't a multiple of 4");
+                        continue;
+                    }
+                    AddMapping(srcCode, ucode, srcCodeByteLength);
                 }
                 catch (Exception)
                 {
@@ -221,6 +247,9 @@ public class CMap
                     //the map uses, and loop over the cids.
                     Debug.WriteLine($"Oops.. we still need to handle this. <{match.Groups[1]}> <{match.Groups[2]}>");
                 }
+            }else{
+                Debug.WriteLine("Ummm... well that's awkward, we didn't match a pair of numbers.");
+                break;
             }
         }
     }
@@ -244,7 +273,7 @@ public class CMap
                 //Convert our matches to ints
                 int fromGlyf = Convert.ToInt32(match.Groups[1].Value, 16);
                 int toGlyf = Convert.ToInt32(match.Groups[2].Value, 16);
-                int ucode = Convert.ToInt32(match.Groups[3].Value, 16);
+                int ucode = (char)Convert.ToInt16(match.Groups[3].Value, 16);
 
                 //Ensure to is > then from
                 if (fromGlyf > toGlyf) continue;
@@ -253,7 +282,7 @@ public class CMap
                 for (int i = 0; fromGlyf + i <= toGlyf; i++)
                 {
                     int glyf = fromGlyf + i;
-                    AddMapping(glyf, ucode, match.Groups[1].Value.Length / 2);
+                    AddMapping(glyf, ucode.ToString(), match.Groups[1].Value.Length / 2);
                 }
             }
             else

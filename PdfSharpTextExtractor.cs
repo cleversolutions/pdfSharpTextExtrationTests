@@ -56,7 +56,7 @@ public class PdfSharpTextExtractor
             {
                 continue;
             }
-            var cmap = new CMap(stream);
+            var cmap = new CMap(stream, fontName);
             FontLookup[fontName] = cmap;
         }
     }
@@ -116,8 +116,6 @@ public class PdfSharpTextExtractor
             {
                 ExtractText(element, target);
             }
-
-            // target.Append(" ");
         }
     }
 
