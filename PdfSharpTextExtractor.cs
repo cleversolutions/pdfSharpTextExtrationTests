@@ -29,7 +29,7 @@ public class PdfSharpTextExtractor
             foreach (var page in document.Pages)
             {
                 pageIdx++;
-                if (pageIdx <= 2) continue;
+                // if (pageIdx <= 2) continue;
                 if (pageIdx == 4) break;
                 Debug.WriteLine($"Processing Page {pageIdx}");
 

@@ -27,8 +27,8 @@ namespace pdf_text_extractor_test
         public void Test1()
         {
             // var filePath = "../../../test-files/test.pdf";
-            var filePath = "../../../test-files/2017-BMA.pdf";
-            // var filePath = "../../../test-files/windows-vista.pdf";
+            //var filePath = "../../../test-files/2017-BMA.pdf";
+            var filePath = "../../../test-files/windows-vista.pdf";
             //var filePath = "../../../test-files/managecookies.pdf";
             string result;
             PdfSharpTextExtractor extractor = new PdfSharpTextExtractor();
