@@ -14,4 +14,11 @@
     <PackageReference Include="PdfSharpCore" Version="1.1.21" />
   </ItemGroup>
 
+  <Target Name="CopyCustomContent" AfterTargets="AfterBuild">
+    <Copy SourceFiles="glyphlist.txt" DestinationFolder="$(OutDir)" />
+  </Target>
+  <Target Name="CopyCustomContentOnPublish" AfterTargets="Publish">
+    <Copy SourceFiles="glyphlist.txt" DestinationFolder="$(PublishDir)" />
+  </Target>
+
 </Project>

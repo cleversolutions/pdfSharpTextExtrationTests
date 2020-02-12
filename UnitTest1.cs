@@ -24,6 +24,11 @@ namespace pdf_text_extractor_test
         }
 
         [Test]
+        public void GlyphListTest(){
+            var list = AdobeGlyfList.Instance;
+        }
+
+        [Test]
         public void Test1()
         {
             // var filePath = "../../../test-files/test.pdf";

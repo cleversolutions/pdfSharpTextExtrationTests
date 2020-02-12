@@ -12,12 +12,12 @@ using PdfSharpCore.Pdf.IO;
 
 public class PdfSharpTextExtractor
 {
-    private Dictionary<string, CMap> FontLookup;
+    private Dictionary<string, FontResource> FontLookup;
     private string CurrentFont;
 
     public PdfSharpTextExtractor()
     {
-        FontLookup = new Dictionary<string, CMap>();
+        FontLookup = new Dictionary<string, FontResource>();
     }
 
     public string GetTextFromPdf(Stream pdfFileStream)
@@ -29,12 +29,18 @@ public class PdfSharpTextExtractor
             foreach (var page in document.Pages)
             {
                 pageIdx++;
+                if(pageIdx == 2) break;
                 // if (pageIdx <= 2) continue;
-                if (pageIdx == 4) break;
+                // if (pageIdx == 4) break;
                 Debug.WriteLine($"Processing Page {pageIdx}");
 
-                ParseCMAPs(page);
+                // generate the lookup tables we will need for each page
+                ParseFonts(page);
+
+                // extract the text
                 ExtractText(ContentReader.ReadContent(page), result);
+
+                // delineate each page with a newline
                 result.AppendLine();
 
             }
@@ -42,22 +48,21 @@ public class PdfSharpTextExtractor
         }
     }
 
-    private void ParseCMAPs(PdfPage page)
+    ///
+    /// Build a dictionary of font names and their associated information used to encode the data
+    /// as unicode strings.
+    ///
+    private void ParseFonts(PdfPage page)
     {
         var fontResource = page.Resources.Elements.GetDictionary("/Font")?.Elements;
         if (fontResource == null) return;
         //All that above isn't going to do, but it's close...
         foreach (var fontName in fontResource.Keys)
         {
-            var resource = fontResource[fontName];
-            var unicodeDictionary = ((resource as PdfReference)?.Value as PdfDictionary)?.Elements?.GetDictionary("/ToUnicode");
-            var stream = unicodeDictionary?.Stream;
-            if (stream == null)
-            {
-                continue;
-            }
-            var cmap = new CMap(stream, fontName);
-            FontLookup[fontName] = cmap;
+            var resource = fontResource[fontName] as PdfReference;
+            var font = new FontResource(fontName, resource);
+            
+            FontLookup[fontName] = font;
         }
     }
 
@@ -119,7 +124,6 @@ public class PdfSharpTextExtractor
         }
     }
 
-
     private void ExtractTextFromString(CString obj, StringBuilder target)
     {
         string text = obj.Value;
@@ -127,12 +131,12 @@ public class PdfSharpTextExtractor
         if (!string.IsNullOrEmpty(CurrentFont) && FontLookup.ContainsKey(CurrentFont))
         {
             //Do character sub with the current fontMap
-            var cmap = FontLookup[CurrentFont];
-            text = cmap.Encode(text);
+            var font = FontLookup[CurrentFont];
+            text = font.Encode(text);
         }
         else
         {
-            Debug.WriteLine($"Font {CurrentFont ?? "(null)"} not found");
+            Debug.WriteLine($"Font {CurrentFont ?? "(null)"} not found.{text}");
         }
         target.Append(text);
     }
