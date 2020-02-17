@@ -36,57 +36,74 @@ public class CMap
     {
         //Convert to bytes
         var chars = text.ToCharArray();
+        //Should we use Encoding.BigEndianUnicode.GetBytes(text) instead?
+        var be16 = Encoding.BigEndianUnicode.GetBytes(text);
         string result = "";
 
         //find a substitution for every char in the text
         for (int chrIdx = 0; chrIdx < chars.Length; chrIdx++)
         {
-            // 1-byte cid
+            //Ranges should not overlap, but the spec and the real world...
+            //Start with 1 byte, see if we find a 1 byte match. If not try 2 bytes etc.
+            //CodeSpaceRange.NumberOfBytes should indicate how many bytes we map, but it doesn't in real life
+            CodeSpaceRange.Map map;
             int cid = chars[chrIdx];
-            var range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid && r.NumberOfBytes == 1);
+            var range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid);
             if (range != null)
             {
-                if (range.Mapping.TryGetValue(cid, out string ucode))
+                if (range.Mapping.TryGetValue(cid, out map) && map.SourceByteLength == 1)
                 {
-                    result += ucode;
+                    result += map.UnicodeValue;
                     continue;
                 }
             }
 
             // 2-byte cid
             cid = (chars[chrIdx] << 8) | chars[chrIdx + 1];
-            range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid && r.NumberOfBytes == 2);
+            range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid);
             if (range != null)
             {
-                if (range.Mapping.TryGetValue(cid, out string ucode))
+                if (range.Mapping.TryGetValue(cid, out map) && map.SourceByteLength == 2)
                 {
-                    result += ucode;
+                    result += map.UnicodeValue;
                     chrIdx++;
                     continue;
                 }
-                else
+
+            }
+
+            // 3-byte cid
+            cid = (chars[chrIdx] << 16) | (chars[chrIdx + 1] << 8) | chars[chrIdx + 2];
+            range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid);
+            if (range != null)
+            {
+                if (range.Mapping.TryGetValue(cid, out map) && map.SourceByteLength == 2)
                 {
-                    result += (char)cid;
-                    chrIdx++;
-                    Debug.WriteLine($"Pass through char {cid:X} for font {FontName}");
+                    result += map.UnicodeValue;
+                    chrIdx += 2;
                     continue;
                 }
             }
 
-            //TODO 3 and 4 byte
 
-            //Fallback on using the cid
+            // 4-byte cid
+            cid = (chars[chrIdx] << 32) | (chars[chrIdx + 1] << 16) | (chars[chrIdx + 2] << 8) | chars[chrIdx + 3];
+            range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid);
+            if (range != null)
+            {
+                if (range.Mapping.TryGetValue(cid, out map) && map.SourceByteLength == 2)
+                {
+                    result += map.UnicodeValue;
+                    chrIdx += 3;
+                    continue;
+                }
+            }
+
+            //Fallback on using the cid... I don't think this is supposed to be done.
+            cid = chars[chrIdx];
             Debug.WriteLine($"Failed to encode {cid:X}");
             result.Append((char)cid);
 
-
-            // I should be able to do this in a loop... bute maybe coding it 4 times as above is more readable
-            // for (int numBytes = 1; numBytes <= 4; numBytes++)
-            // {
-            //     char
-            //     int cid = BitConverter.ToInt32()
-            //     var range = CodeSpaceRanges.FirstOrDefault()
-            // }
         }
 
         return result;
@@ -186,14 +203,14 @@ public class CMap
     private void AddMapping(int cid, string ucode, int lengthInBytes)
     {
         //Find the proper codespace range and add the mapping
-        var range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid && r.NumberOfBytes == lengthInBytes);
+        var range = CodeSpaceRanges.FirstOrDefault(r => r.Low <= cid && r.High >= cid);
         if (range != null)
         {
-            range.Mapping[cid] = ucode;
+            range.AddMap(cid, ucode, lengthInBytes);
         }
         else
         {
-            Debug.WriteLine($"Can't find char range for {cid:X}, {ucode:X}");
+            Debug.WriteLine($"Can't find char range for {cid:X}, {ucode:X} in font {FontName}");
         }
     }
 

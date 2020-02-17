@@ -32,13 +32,13 @@ public class FontResource
 
     public string Encode(string text)
     {
+
         // convert any characters that fall in the /Encoding /Differences array
-        var differencesLength= _differences.Elements.Count ;
-        if (_differences != null && differencesLength > 0)
+        if (_differences != null && _differences.Elements.Count > 0)
         {
             var glyphMap = AdobeGlyfList.Instance;
             var chars = text.ToCharArray().Select(ch => {
-                if(differencesLength > ch){
+                if(_differences.Elements.Count > ch){
                     var item = _differences.Elements[ch];
                     if(item is PdfName name){
                         return glyphMap.Lookup(name.Value);    

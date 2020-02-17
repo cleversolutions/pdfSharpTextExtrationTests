@@ -32,16 +32,17 @@ namespace pdf_text_extractor_test
         public void Test1()
         {
             // var filePath = "../../../test-files/test.pdf";
-            //var filePath = "../../../test-files/2017-BMA.pdf";
-            var filePath = "../../../test-files/windows-vista.pdf";
-            //var filePath = "../../../test-files/managecookies.pdf";
+            var filePath = "../../../test-files/2017-BMA.pdf";
+            // var filePath = "../../../test-files/windows-vista.pdf";
+            // var filePath = "../../../test-files/managecookies.pdf";
             string result;
             PdfSharpTextExtractor extractor = new PdfSharpTextExtractor();
             using (var fs = File.Open(filePath, FileMode.Open))
             {
                 result = extractor.GetTextFromPdf(fs);
             }
-            Debug.WriteLine($"Final Result: {result.Substring(0, Math.Min(result.Length, 1000))}");
+            Debug.WriteLine(result);
+            // Debug.WriteLine($"Final Result: {result.Substring(0, Math.Min(result.Length, 1000))}");
 
             // Debug.WriteLine("Result should be: en dash between quotes \"–\". – A");
             //Assert.AreEqual("en dash between quotes \"–\". – A\n", result);
