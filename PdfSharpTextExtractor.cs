@@ -122,6 +122,9 @@ public class PdfSharpTextExtractor
                 ExtractText(element, target);
             }
         }
+        // if(obj.OpCode.OpCodeName == OpCodeName.ET){
+        //     target.Append("\n");
+        // }
     }
 
     private void ExtractTextFromString(CString obj, StringBuilder target)

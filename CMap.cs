@@ -10,7 +10,11 @@ using System.Text.RegularExpressions;
 /// Parse a CMap file.
 /// This is not a complete CMAP parser. There are many parts of the CMAP spec that this doesn't
 /// yet implement. This parser aims to catch the most common features necessary for text extraction
-/// of pdf documents.
+/// of pdf documents. This is also probably completely wrong. I've read bits and pieces of the 
+/// Adobe PDF spec to piece this together, but I am certainly not the domain expert one should be
+/// to do a proper job of this.
+/// TODO - Include referenced CMAPs
+/// TODO - Support standard CMAPs
 ///
 public class CMap
 {
